@@ -27,7 +27,7 @@ Newer versions may work, but these are known working.
 
 **It's critical that you install/downgrade the ESP32 Board version to _2.0.14_!**
 
-Versions 3+ will not fit the available memory and also cause compile errors with LGFX, while versions >2.0.14 can cause a reset loop on the C3 in combination with TFT_eSPI.
+Versions 3+ will not fit the available memory and also cause compile errors with LGFX, while versions >2.0.14 can cause a reset loop on the C3.
 
 As board type, select the **LOLIN C3 Mini** if you are using the above ESP32-C3 SuperMini.
 
