@@ -26,6 +26,8 @@ Also compatible with other ESP32 devices, but may require pin reassignments belo
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <WiFiManager.h>
+#include "esp_system.h"
+
 //including the arrow images
 #include "Flat.h"
 #include "DoubleDown.h"
@@ -68,7 +70,7 @@ public:
     }
     {  // ---- Panel config ----
       auto cfg = _panel_instance.config();
-      cfg.pin_cs = -1;   // no CS defined in TFT_eSPI setup
+      cfg.pin_cs = -1;  // no CS defined in TFT_eSPI setup
       cfg.pin_rst = 3;  // TFT_RST
       cfg.pin_busy = -1;
 
@@ -100,6 +102,8 @@ public:
 };
 
 LGFX tft;
+LGFX_Sprite sprite(&tft);
+
 
 #include <ESP_MultiResetDetector.h>
 // A library for checking if the reset button has been pressed x amounts of time
@@ -418,14 +422,17 @@ void setup() {
   Serial.setTimeout(2000);
   Serial.println();
   Serial.println("Starting up...");
-
+  sprite.createSprite(240, 240);
+  sprite.setColorDepth(16);
   bool forceConfig = false;
-
+  
+  delay(500); // reduce the chance of false detection at cold boot
   mrd = new MultiResetDetector(MRD_TIMEOUT, MRD_ADDRESS);
   if (mrd->detectMultiReset()) {
     Serial.println(F("Forcing config mode as there was a Triple reset detected"));
     forceConfig = true;
   }
+
 
   bool spiffsSetup = loadConfigFile();
   if (!spiffsSetup) {
@@ -598,9 +605,14 @@ void loop() {
   localtime_r(&now, &tm);
 
   if (WiFi.status() != WL_CONNECTED) {
-    WiFi.reconnect();
+    static unsigned long lastReconnectAttempt = 0;
+    if (millis() - lastReconnectAttempt > 3000) {
+      Serial.println("Reconnecting WiFi...");
+      WiFi.reconnect();
+      lastReconnectAttempt = millis();
+    }
   }
-  
+
   // Retrieve glucose data from NightScout Server
   if (tm.tm_min != last_minute) {
     last_minute = tm.tm_min;
@@ -618,6 +630,8 @@ void loop() {
     if (httpCode > 0) {
       // HTTP header has been send and Server response header has been handled
       Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+      Serial.print("Free heap: ");
+      Serial.println(ESP.getFreeHeap());
 
       // NightScout data received from server
       if (httpCode == HTTP_CODE_OK) {
@@ -666,6 +680,8 @@ void loop() {
           int bgcol = TFT_WHITE;
           int agecol = TFT_WHITE;
           int agepos = 38;
+          sprite.fillScreen(TFT_BLACK);
+
           if (sgv > 0) {  //only display if glucose value is valid
             // configure display positions depending on whether glucose is two or three digits
             int digits;
@@ -674,19 +690,20 @@ void loop() {
             } else {
               digits = 30;
             }
-            if (sgv != last_sgv) {
-              last_sgv = sgv;
-              int bgcol = TFT_WHITE;
-              if (sgv >= HighBG) bgcol = TFT_ORANGE;
-              else if ((sgv <= LowBG) && (sgv > CritBG)) bgcol = TFT_YELLOW;
-              else if (sgv <= CritBG) bgcol = TFT_RED;
+            bgcol = TFT_WHITE;
+            if (sgv >= HighBG) bgcol = TFT_ORANGE;
+            else if ((sgv <= LowBG) && (sgv > CritBG)) bgcol = TFT_YELLOW;
+            else if (sgv <= CritBG) bgcol = TFT_RED;
 
-              tft.fillRect(30, 110, 148, 62, TFT_BLACK);
-              tft.setCursor((sgv < 100) ? 70 : 30, 115);
-              tft.setFont(&_19_font28pt7b);
-              tft.setTextColor(bgcol, TFT_BLACK);
-              tft.println(sgv);
+            sprite.setFont(&_19_font28pt7b);
+            sprite.setTextColor(bgcol, TFT_BLACK);
+            if (sgv < 100) {
+              sprite.setCursor(70, 115);
+            } else {
+              sprite.setCursor(30, 115);
             }
+            sprite.println(sgv);
+
 
             // set color and position of last data depending on amount of digits and time since last value
             if (elapsed_mn >= 15) {
@@ -701,89 +718,52 @@ void loop() {
               agepos = 23;
             }
             // actually display Last Data
-            tft.fillRect(0, 0, 240, 28, TFT_BLACK);
-            tft.setFont(&fonts::FreeSerifBold9pt7b);
-            tft.setTextColor((agecol), TFT_BLACK);
-            tft.setCursor(agepos, 4);
-            tft.print("Last Data: ");
-            tft.print(elapsed_mn);
+            sprite.setFont(&fonts::FreeSerifBold9pt7b);
+            sprite.setTextColor(agecol, TFT_BLACK);
+            sprite.setCursor(agepos, 4);
             if (elapsed_mn == 1) {
-              tft.println(" min ago");
+              sprite.printf("Last Data: %d min ago", elapsed_mn);
 
             } else {
-              tft.println(" mins ago");
+              sprite.printf("Last Data: %d mins ago", elapsed_mn);
             }
           }
 
           // prepare and display clock, add leading 0 if single digits
           hour_c = (tm.tm_hour);
           min_c = (tm.tm_min);
-          tft.fillRect(10, 30, 190, 60, TFT_BLACK);  //clearing time string for less flicker on refresh
-          tft.setFont(&fonts::FreeSerifBold24pt7b);
-          tft.setTextColor(TFT_BLUE, TFT_BLACK);
-          tft.setCursor(65, 40);
-          if ((hour_c) < 10) tft.print("0");
-          tft.print(hour_c);
-          tft.print(":");
-          if ((min_c) < 10) tft.print("0");
-          tft.print(min_c);
+          sprite.setFont(&fonts::FreeSerifBold24pt7b);
+          sprite.setTextColor(TFT_BLUE, TFT_BLACK);
+          sprite.setCursor(65, 40);
+          sprite.printf("%02d:%02d", hour_c, min_c);
 
           //Check trend number from json and show the matching arrow
-          if ((trend) == 1) {
-            tft.setSwapBytes(true);
-            tft.pushImage(180, 112, 50, 50, DoubleUp);
-          }
-          if ((trend) == 2) {
-            tft.setSwapBytes(true);
-            tft.pushImage(180, 112, 50, 50, Up);
-          }
-          if ((trend) == 3) {
-            tft.setSwapBytes(true);
-            tft.pushImage(180, 112, 50, 50, FortyFiveUp);
-          }
-          if ((trend) == 4) {
-            tft.setSwapBytes(true);
-            tft.pushImage(180, 112, 50, 50, Flat);
-          }
-          if ((trend) == 5) {
-            tft.setSwapBytes(true);
-            tft.pushImage(180, 112, 50, 50, FortyFiveDown);
-          }
-          if ((trend) == 6) {
-            tft.setSwapBytes(true);
-            tft.pushImage(180, 112, 50, 50, Down);
-          }
-          if ((trend) == 7) {
-            tft.setSwapBytes(true);
-            tft.pushImage(180, 112, 50, 50, DoubleDown);
-          }
-          if ((trend) == 8) {  //show blank if no valid trend arrow
-            tft.fillRect(175, 100, 60, 50, TFT_BLACK);
+          sprite.setSwapBytes(true);
+          switch (trend) {
+            case 1: sprite.pushImage(180, 112, 50, 50, DoubleUp); break;
+            case 2: sprite.pushImage(180, 112, 50, 50, Up); break;
+            case 3: sprite.pushImage(180, 112, 50, 50, FortyFiveUp); break;
+            case 4: sprite.pushImage(180, 112, 50, 50, Flat); break;
+            case 5: sprite.pushImage(180, 112, 50, 50, FortyFiveDown); break;
+            case 6: sprite.pushImage(180, 112, 50, 50, Down); break;
+            case 7: sprite.pushImage(180, 112, 50, 50, DoubleDown); break;
           }
 
           // adjust delta position depending on digit count and display
-          int deltapos = 54;
-          if (bg_delta >= 10) {
-            deltapos = 42;
-          }
-          // redraw delta if it changed
-          if (bg_delta != last_delta) {
-            last_delta = bg_delta;
-            tft.fillRect(35, 180, 200, 60, TFT_BLACK);
-            tft.setFont(&fonts::FreeSerifBold18pt7b);
-            tft.setTextColor(TFT_BLUE, TFT_BLACK);
-            tft.setCursor((bg_delta >= 10) ? 42 : 54, 200);
-            tft.print("Delta: ");
-            if (bg_delta >= 0) tft.print("+");
-            tft.println(bg_delta);
-          }
+          sprite.setFont(&fonts::FreeSerifBold18pt7b);
+          sprite.setTextColor(TFT_BLUE, TFT_BLACK);
+          sprite.setCursor((bg_delta >= 10) ? 42 : 54, 200);
+          sprite.printf("Delta: %+d", bg_delta);
+          sprite.pushSprite(0, 0);
         }
       }
     }
 
 
+
     else {
       Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      delay(2000);  // prevent rapid retries
     }
 
     http.end();
