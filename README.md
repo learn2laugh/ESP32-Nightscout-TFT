@@ -16,7 +16,8 @@ Note that if your display has additional pins, i.e. a CS pin, you can just ignor
 ESP32-C3:
 https://www.aliexpress.com/item/1005006599448997.html
 
-![wiring-C3](https://github.com/user-attachments/assets/eaa8e22f-1cd9-4673-a234-814b33b1991a)
+<img width="1236" height="1174" alt="wiring-C3" src="https://github.com/user-attachments/assets/34d405e4-74ff-44bf-8968-7528eb9dc79d" />
+
 
 Use Arduino IDE 2.3.5 or 2.3.6 to compile.
 
