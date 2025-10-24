@@ -59,9 +59,9 @@ public:
       cfg.dma_channel = SPI_DMA_CH_AUTO;
 
       cfg.pin_sclk = 4;   // TFT_SCLK
-      cfg.pin_mosi = 6;   // TFT_MOSI
+      cfg.pin_mosi = 2;   // TFT_MOSI
       cfg.pin_miso = -1;  // no MISO on ST7789
-      cfg.pin_dc = 8;     // TFT_DC
+      cfg.pin_dc = 1;     // TFT_DC
 
       _bus_instance.config(cfg);
       _panel_instance.setBus(&_bus_instance);
@@ -69,7 +69,7 @@ public:
     {  // ---- Panel config ----
       auto cfg = _panel_instance.config();
       cfg.pin_cs = -1;   // no CS defined in TFT_eSPI setup
-      cfg.pin_rst = 10;  // TFT_RST
+      cfg.pin_rst = 3;  // TFT_RST
       cfg.pin_busy = -1;
 
       cfg.memory_width = 240;
