@@ -18,6 +18,11 @@ https://www.aliexpress.com/item/1005006599448997.html
 
 <img width="1236" height="1174" alt="wiring-C3" src="https://github.com/user-attachments/assets/34d405e4-74ff-44bf-8968-7528eb9dc79d" />
 
+If you want to flash the [binary](https://github.com/Arakon/ESP32-Nightscout-TFT/blob/main/ESP32_Nightscout_TFT-C3.bin) directly, get [esptool](https://github.com/espressif/esptool/releases/download/v4.10.0/esptool-v4.10.0-windows-amd64.zip), extract it, copy the ESP32_Nightscout_TFT-C3.bin to the same folder, then open a command prompt, navigate to the folder you extracted it to, and run:
+
+`esptool --port COMxx write_flash 0x0 ESP32_Nightscout_TFT-C3.bin`
+
+Replace "COMxx" with your COM port number of the ESP32-C3 (i.e. COM5)
 
 Use Arduino IDE 2.3.5 or 2.3.6 to compile.
 
