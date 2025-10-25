@@ -15,7 +15,6 @@ Also compatible with other ESP32 devices, but may require pin reassignments belo
 // Library Defines - Need to be defined before library import
 // ----------------------------
 
-#define ESP_MRD_USE_SPIFFS true
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -26,8 +25,8 @@ Also compatible with other ESP32 devices, but may require pin reassignments belo
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <WiFiManager.h>
-#include "esp_system.h"
-
+// A library for checking if the reset button has been pressed x amounts of time
+// Can be used to enable config mode
 //including the arrow images
 #include "Flat.h"
 #include "DoubleDown.h"
@@ -36,6 +35,7 @@ Also compatible with other ESP32 devices, but may require pin reassignments belo
 #include "FortyFiveDown.h"
 #include "Up.h"
 #include "Down.h"
+#define ESP_MRD_USE_SPIFFS true
 
 #define GFXFF 1
 #include <LovyanGFX.hpp>
@@ -90,7 +90,7 @@ public:
     }
     {  // ---- Backlight (if you have one) ----
       auto cfg = _light_instance.config();
-      cfg.pin_bl = -1;  // <- change this if your backlight is connected
+      cfg.pin_bl = 0;  // <- change this if your backlight is connected
       cfg.invert = false;
       cfg.freq = 44100;
       cfg.pwm_channel = 0;
@@ -104,14 +104,8 @@ public:
 LGFX tft;
 LGFX_Sprite sprite(&tft);
 
-
-#include <ESP_MultiResetDetector.h>
-// A library for checking if the reset button has been pressed x amounts of time
-// Can be used to enable config mode
-
 int hour_c;
 int min_c;
-int sec_c;
 
 // These determine when the color of the glucose value changes, edit if you like.
 int HighBG = 180;
@@ -123,25 +117,18 @@ int CritBG = 70;
 // -------------------------------------
 
 const int PIN_LED = LED_BUILTIN;  // default onboard LED
-const int backlight_pin = 0;
+//const int backlight_pin = 0;
 int backlight = 64;
 
-#define JSON_CONFIG_FILE "/sample_config.json"
+#define JSON_CONFIG_FILE "/config.json"
 
 // Number of seconds after reset during which a
 // subseqent reset will be considered a triple reset.
 #define MRD_TIMES 3
 #define MRD_TIMEOUT 5
-// RTC Memory Address for the DoubleResetDetector to use
 #define MRD_ADDRESS 0
-
-
-// -----------------------------
-
-// -----------------------------
-
+#include <ESP_MultiResetDetector.h>
 MultiResetDetector* mrd;
-
 //flag for saving data
 bool shouldSaveConfig = false;
 
@@ -162,17 +149,17 @@ char ntpServer2[50] = "de.pool.ntp.org";
 // Time zone for local time and daylight saving
 // list here:
 // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
-char local_time_zone[50] = "CET-1CEST,M3.5.0,M10.5.0/3";  // set for Europe/Paris
+char local_time_zone[50] = "CET-1CEST,M3.5.0,M10.5.0/3";  // set for Europe/Berlin
 char utc_time_zone[] = "GMT0";
 int gmtOffset_sec = 3600;
-long daylightOffset_sec = 3600;  // long
+long daylightOffset_sec = 3600; 
 
 // time zone offset in minutes, initialized to UTC
 int tzOffset = 0;
 
 void serialPrintParams() {
   Serial.println("\tNS_API_URL : " + String(NS_API_URL));
-  //Serial.println("\tNS_API_SECRET: " + String(NS_API_SECRET));
+  Serial.println("\tNS_API_SECRET: " + String(NS_API_SECRET));
   Serial.println("\tntpServer1 : " + String(ntpServer1));
   Serial.println("\tntpServer2 : " + String(ntpServer2));
   Serial.println("\tlocal_time_zone : " + String(local_time_zone));
@@ -238,6 +225,10 @@ bool loadConfigFile() {
         DeserializationError error = deserializeJson(json, configFile);
         serializeJsonPretty(json, Serial);
         if (!error) {
+          backlight = json["backlight"];
+          HighBG = json["HighBG"];
+          LowBG = json["LowBG"];
+          CritBG = json["CritBG"];          
           strcpy(NS_API_URL, json["NS_API_URL"]);
           strcpy(NS_API_SECRET, json["NS_API_SECRET"]);
           strcpy(ntpServer1, json["ntpServer1"]);
@@ -245,13 +236,6 @@ bool loadConfigFile() {
           strcpy(local_time_zone, json["local_time_zone"]);
           gmtOffset_sec = json["gmtOffset_sec"];
           daylightOffset_sec = json["daylightOffset_sec"];
-          backlight = json["backlight"];
-          HighBG = json["HighBG"];
-          LowBG = json["LowBG"];
-          CritBG = json["CritBG"];
-
-          Serial.println("\nThe loaded values are: ");
-          serialPrintParams();
 
           return true;
         } else {
@@ -261,13 +245,10 @@ bool loadConfigFile() {
     }
   } else {
     Serial.println("failed to mount FS");
-    // SPIFFS.format();
   }
   //end read
   return false;
 }
-
-
 
 
 //callback notifying us of the need to save config
@@ -277,8 +258,6 @@ void saveConfigCallback() {
 }
 
 WiFiManager wm;
-
-
 
 // default password for Access Point, made from macID
 char* getDefaultPassword() {
@@ -304,12 +283,10 @@ void saveParamsCallback() {
   wm.stopConfigPortal();  // will abort config portal after page is sent
 }
 
-// This gets called when the config mode is launced, might
+// This gets called when the config mode is launched, might
 // be useful to update a display with this info.
 void configModeCallback(WiFiManager* myWiFiManager) {
   Serial.println("Entered Conf Mode");
-
-
   Serial.print("Config SSID: ");
   Serial.println(myWiFiManager->getConfigPortalSSID());
   Serial.print("Config password: ");
@@ -355,8 +332,6 @@ struct tm getActualTzTime() {
   return (timeinfo);
 }
 
-
-
 /**
  * Returns the offset in seconds between local time and UTC
  */
@@ -390,35 +365,27 @@ int getTzOffset(char* timezone) {
   return (tzOffset);
 }
 
-/**
- * Setup : 
- * - connect to wifi, 
- * - evaluate offset between local time and UTC
- */
 void setup() {
 
   Serial.begin(115200);
-
-  Serial.println();
   Serial.println();
   Serial.println("ESP start");
-
+ 
   pinMode(PIN_LED, OUTPUT);
-  pinMode(backlight_pin, OUTPUT);
+  //pinMode(backlight_pin, OUTPUT);
 
   // Initialize display
   tft.init();
   tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
   //Print something during boot so you know it's doing something
-  analogWrite(backlight_pin, 128);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);  // Note: the new fonts do not draw the background colour
+  tft.setBrightness(backlight);
+  tft.setTextColor(TFT_YELLOW, TFT_BLACK); 
   tft.setCursor(10, 60);
   tft.setTextSize(2);
   tft.println("Starting up...");  // Due to the way the updates are delayed, it can take up to 60 seconds to get glucose data
   tft.println(" Wait 60 seconds.");
   tft.setTextSize(1);
-  Serial.begin(115200);
   Serial.setTimeout(2000);
   Serial.println();
   Serial.println("Starting up...");
@@ -426,7 +393,7 @@ void setup() {
   sprite.setColorDepth(16);
   bool forceConfig = false;
   
-  delay(500); // reduce the chance of false detection at cold boot
+  delay(200); // reduce the chance of false detection at cold boot
   mrd = new MultiResetDetector(MRD_TIMEOUT, MRD_ADDRESS);
   if (mrd->detectMultiReset()) {
     Serial.println(F("Forcing config mode as there was a Triple reset detected"));
@@ -434,14 +401,12 @@ void setup() {
   }
 
 
-  bool spiffsSetup = loadConfigFile();
-  if (!spiffsSetup) {
+  if (!loadConfigFile()) {
     Serial.println(F("Forcing config mode as there is no saved config"));
     forceConfig = true;
   }
 
   WiFi.mode(WIFI_STA);  // explicitly set mode, esp defaults to STA+AP
-  Serial.begin(115200);
   delay(10);
 
   //sets timeout until configuration portal gets turned off
@@ -455,8 +420,6 @@ void setup() {
   wm.setSaveParamsCallback(saveParamsCallback);
   //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
   wm.setAPCallback(configModeCallback);
-
-  // Custom parameters here
   wm.setTitle("Nightscout-TFT");
 
   // Set cutom menu via menu[] or vector
@@ -582,7 +545,7 @@ void setup() {
   if (shouldSaveConfig) {
     saveConfigFile();
   }
-  analogWrite(backlight_pin, backlight);
+  tft.setBrightness(backlight);
 
   // offset in seconds between local time and UTC
   tzOffset = getTzOffset(local_time_zone);
@@ -593,13 +556,12 @@ void setup() {
 
 /**
  * Connect to wifi
- * Retrieve glucose data from NightScout server and parse it to Json
+ * Retrieve glucose data from NightScout server and parse it from Json
 
  */
 void loop() {
+  mrd->loop();
   static int last_minute = -1;   // remembers the last minute we fetched data
-  static long last_sgv = -1;     // remembers last glucose value
-  static int last_delta = 9999;  // remembers last delta
   time_t now = time(nullptr);
   struct tm tm;
   localtime_r(&now, &tm);
@@ -629,16 +591,12 @@ void loop() {
     // httpCode will be negative on error
     if (httpCode > 0) {
       // HTTP header has been send and Server response header has been handled
-      Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-      Serial.print("Free heap: ");
-      Serial.println(ESP.getFreeHeap());
-
       // NightScout data received from server
       if (httpCode == HTTP_CODE_OK) {
         String payload = http.getString();
         Serial.println(payload);
 
-        // parse NightScour data Json response
+        // parse NightScout data Json response
         // buffer for Json parser
         StaticJsonDocument<256> filter;  // much smaller than 500
         filter["bgs"][0]["sgv"] = true;
@@ -664,17 +622,9 @@ void loop() {
           long long status0_now = httpResponseBody["status"][0]["now"];
           long long bgs0_datetime = httpResponseBody["bgs"][0]["datetime"];
           int elapsed_mn = (status0_now - bgs0_datetime) / 1000 / 60;
-          if (cleared == 0) {  //clear screen only once to get rid of the Startup string), and to reduce refresh flicker
+          if (cleared == 0) {  //clear screen only once to get rid of the Startup string, and to reduce refresh flicker
             tft.clear(0x000000u);
             cleared++;
-          }
-          //add "+" before delta value only if increasing
-          String delta = "0";
-          String positive = "+";
-          if ((bg_delta) >= 0) {
-            delta = positive + bg_delta;
-          } else {
-            delta = (bg_delta);
           }
 
           int bgcol = TFT_WHITE;
@@ -683,13 +633,6 @@ void loop() {
           sprite.fillScreen(TFT_BLACK);
 
           if (sgv > 0) {  //only display if glucose value is valid
-            // configure display positions depending on whether glucose is two or three digits
-            int digits;
-            if ((sgv) < 100) {
-              digits = 70;
-            } else {
-              digits = 30;
-            }
             bgcol = TFT_WHITE;
             if (sgv >= HighBG) bgcol = TFT_ORANGE;
             else if ((sgv <= LowBG) && (sgv > CritBG)) bgcol = TFT_YELLOW;
