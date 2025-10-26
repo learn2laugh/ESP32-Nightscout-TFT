@@ -25,8 +25,7 @@ Also compatible with other ESP32 devices, but may require pin reassignments belo
 #include <ArduinoJson.h>
 #include <SPI.h>
 #include <WiFiManager.h>
-// A library for checking if the reset button has been pressed x amounts of time
-// Can be used to enable config mode
+
 //including the arrow images
 #include "Flat.h"
 #include "DoubleDown.h"
@@ -90,7 +89,7 @@ public:
     }
     {  // ---- Backlight (if you have one) ----
       auto cfg = _light_instance.config();
-      cfg.pin_bl = 0;  // <- change this if your backlight is connected
+      cfg.pin_bl = 0;  // backlight pin
       cfg.invert = false;
       cfg.freq = 44100;
       cfg.pwm_channel = 0;
@@ -107,7 +106,7 @@ LGFX_Sprite sprite(&tft);
 int hour_c;
 int min_c;
 
-// These determine when the color of the glucose value changes, edit if you like.
+// These determine when the color of the glucose value changes, edit them in the web interface
 int HighBG = 180;
 int LowBG = 90;
 int CritBG = 70;
@@ -117,8 +116,7 @@ int CritBG = 70;
 // -------------------------------------
 
 const int PIN_LED = LED_BUILTIN;  // default onboard LED
-//const int backlight_pin = 0;
-int backlight = 64;
+int backlight = 64; //default brightness
 
 #define JSON_CONFIG_FILE "/config.json"
 
@@ -146,7 +144,7 @@ char NS_API_SECRET[50] = "view-123456790";
 char ntpServer1[50] = "pool.ntp.org";
 char ntpServer2[50] = "de.pool.ntp.org";
 
-// Time zone for local time and daylight saving
+// Time zone for local time and daylight saving, edit in web interface
 // list here:
 // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 char local_time_zone[50] = "CET-1CEST,M3.5.0,M10.5.0/3";  // set for Europe/Berlin
@@ -372,7 +370,6 @@ void setup() {
   Serial.println("ESP start");
  
   pinMode(PIN_LED, OUTPUT);
-  //pinMode(backlight_pin, OUTPUT);
 
   // Initialize display
   tft.init();
@@ -712,3 +709,4 @@ void loop() {
     http.end();
   }
 }
+
